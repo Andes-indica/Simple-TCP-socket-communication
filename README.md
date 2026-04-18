@@ -1,75 +1,85 @@
-# TCP Server and Client in C
+# Multi-Client TCP Server in C
 
-This folder contains a simple TCP socket communication program written in C.
-It demonstrates basic client-server communication over IPv4 using `SOCK_STREAM`.
+This project implements a multi-client TCP echo server using POSIX sockets and `pthreads`.
+The server binds to `127.0.0.1`, accepts multiple simultaneous clients, and creates one thread per client connection.
 
-## Overview
+## Features
 
-- `server.c` creates a TCP server on port `8080`
-- `client.c` connects to `127.0.0.1:8080`
-- Both programs exchange messages interactively through the terminal
-- Typing `exit` ends the chat session
-
-This is a good beginner-friendly example for learning:
-
-- socket creation
-- binding and listening
-- accepting client connections
-- connecting from a client
-- reading and writing over TCP
+- TCP server using `AF_INET` and `SOCK_STREAM`
+- Configurable port with default port `8080`
+- One detached thread per client using `pthread_create()`
+- Thread-safe active connection counter using a mutex
+- Maximum client limit of `100`
+- Graceful handling of disconnects and socket errors
+- Echo-style acknowledgment for every received message
+- Optional artificial delay to simulate network latency
+- Optional random packet drop simulation for testing
 
 ## Files
 
-- `server.c` - TCP server implementation
-- `client.c` - TCP client implementation
+- `server.c` - multi-client threaded TCP server
+- `client.c` - simple test client for interactive messaging
 - `Makefile` - build and cleanup commands
-- `.gitignore` - ignores compiled binaries and temporary files
-
-## Requirements
-
-- GCC or any C compiler
-- Linux or a Unix-like environment
+- `DEVELOPER_GUIDE.md` - detailed implementation walkthrough for contributors
 
 ## Build
 
-Use the provided Makefile:
+Compile with the Makefile:
 
 ```bash
 make
 ```
 
-Or compile manually:
+Manual compilation:
 
 ```bash
-gcc server.c -o server
-gcc client.c -o client
+gcc -Wall -Wextra -std=c11 server.c -o server -lpthread
+gcc -Wall -Wextra -std=c11 client.c -o client
 ```
 
 ## Run
 
-Start the server first:
+Start the server:
 
 ```bash
 ./server
 ```
 
-Open another terminal in the same folder and start the client:
+Run with custom options:
+
+```bash
+./server 9090 2 20
+```
+
+Arguments:
+
+- `port` - listening port on `127.0.0.1` (default `8080`)
+- `delay_seconds` - artificial delay before echoing back messages (default `0`)
+- `drop_rate_percent` - percent chance to simulate dropping a received message (default `0`)
+
+Start a client in another terminal:
 
 ```bash
 ./client
 ```
 
-## Example Flow
+Or connect to a custom port:
 
-1. Run the server
-2. Run the client
-3. Type a message in one terminal
-4. Reply from the other terminal
-5. Type `exit` to close the chat
+```bash
+./client 9090
+```
+
+## Example
+
+1. Start the server with `./server 8080 1 10`
+2. Open multiple terminals
+3. Run `./client 8080` in each terminal
+4. Send messages from each client
+5. Watch the server log client IP, port, messages, disconnects, and active connection count
 
 ## Notes
 
-- The client is hardcoded to connect to `127.0.0.1`
-- The server listens on port `8080`
-- The current implementation handles one client connection at a time
-- Messages are exchanged using a fixed-size buffer of 80 bytes
+- The server only listens on `localhost` (`127.0.0.1`)
+- If more than `100` clients connect, new clients are rejected cleanly
+- Simulated packet drops intentionally skip echo replies for some messages
+- Press `Ctrl+C` to stop the server

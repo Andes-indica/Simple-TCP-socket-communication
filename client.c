@@ -1,77 +1,91 @@
 #include <stdio.h>
-#include <netdb.h>
-#include <netinet/in.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <sys/types.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <sys/socket.h>
 
-#define MAX 80
-#define PORT 8080
-#define SA struct sockaddr
+#define DEFAULT_PORT 8080
+#define SERVER_IP "127.0.0.1"
+#define BUFFER_SIZE 1024
 
-void func(int sockfd)
+static int parse_port(int argc, char *argv[])
 {
-    char buff[MAX];
-    int n;
-    for (;;) {
-        memset(buff, 0, MAX);
-        printf("Enter the string: ");
-        n = 0;
-        while ((buff[n++] = getchar()) != '\n');
-        
-        // Send message to server
-        write(sockfd, buff, sizeof(buff));
-        
-        // Read response from server
-        memset(buff, 0, MAX);
-        read(sockfd, buff, sizeof(buff));
-        printf("From Server: %s", buff);
-        
-        // Check if client wants to exit
-        if ((strncmp(buff, "exit", 4)) == 0) {
-            printf("Client Exit...\n");
-            break;
+    char *end_ptr = NULL;
+    long port = DEFAULT_PORT;
+
+    if (argc >= 2) {
+        port = strtol(argv[1], &end_ptr, 10);
+        if (argv[1][0] == '\0' || *end_ptr != '\0' || port < 1 || port > 65535) {
+            fprintf(stderr, "Invalid port: %s\n", argv[1]);
+            exit(EXIT_FAILURE);
         }
     }
+
+    return (int)port;
 }
 
-int main()
+int main(int argc, char *argv[])
 {
-    int sockfd;
-    struct sockaddr_in servaddr;
-    
-    // Create socket
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd == -1) {
-        printf("Socket creation failed...\n");
-        exit(0);
+    int client_socket;
+    int port = parse_port(argc, argv);
+    struct sockaddr_in server_addr;
+    char send_buffer[BUFFER_SIZE];
+    char recv_buffer[BUFFER_SIZE];
+
+    client_socket = socket(AF_INET, SOCK_STREAM, 0);
+    if (client_socket < 0) {
+        perror("socket failed");
+        return EXIT_FAILURE;
     }
-    else
-        printf("Socket successfully created..\n");
-    
-    memset(&servaddr, 0, sizeof(servaddr));
-    
-    // Set server address
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
-    servaddr.sin_port = htons(PORT);
-    
-    // Connect to server
-    if (connect(sockfd, (SA*)&servaddr, sizeof(servaddr)) != 0) {
-        printf("Connection with the server failed...\n");
-        exit(0);
+
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons((unsigned short)port);
+
+    if (inet_pton(AF_INET, SERVER_IP, &server_addr.sin_addr) <= 0) {
+        perror("inet_pton failed");
+        close(client_socket);
+        return EXIT_FAILURE;
     }
-    else
-        printf("Connected to the server..\n");
-    
-    // Start communication with server
-    func(sockfd);
-    
-    // Close socket
-    close(sockfd);
-    
-    return 0;
+
+    if (connect(client_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+        perror("connect failed");
+        close(client_socket);
+        return EXIT_FAILURE;
+    }
+
+    printf("Connected to %s:%d\n", SERVER_IP, port);
+    printf("Type a message and press Enter. Type 'exit' to close the client.\n");
+
+    while (fgets(send_buffer, sizeof(send_buffer), stdin) != NULL) {
+        size_t message_length = strlen(send_buffer);
+
+        if (send(client_socket, send_buffer, message_length, 0) < 0) {
+            perror("send failed");
+            break;
+        }
+
+        if (strcmp(send_buffer, "exit\n") == 0) {
+            break;
+        }
+
+        memset(recv_buffer, 0, sizeof(recv_buffer));
+        ssize_t bytes_received = recv(client_socket, recv_buffer, sizeof(recv_buffer) - 1, 0);
+        if (bytes_received < 0) {
+            perror("recv failed");
+            break;
+        }
+
+        if (bytes_received == 0) {
+            printf("Server closed the connection.\n");
+            break;
+        }
+
+        recv_buffer[bytes_received] = '\0';
+        printf("Server echoed: %s", recv_buffer);
+    }
+
+    close(client_socket);
+    return EXIT_SUCCESS;
 }
