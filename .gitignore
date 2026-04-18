@@ -1,0 +1,7 @@
+server
+client
+*.out
+*.exe
+*.o
+*.obj
+*.log
